@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.bind.annotation.*;
 import riggie.common.R;
 import riggie.dto.SetmealDto;
@@ -30,6 +31,8 @@ public class SetmealController {
     private CategoryService categoryService;
     @Autowired
     private SetmealDishService setmealDishService;
+    @Autowired
+    private RedisTemplate redisTemplate;
     @PostMapping
     public R<String> saveSetmeal(@RequestBody SetmealDto setmealDto){
         log.info("启用saveSetmeal方法");
@@ -82,12 +85,18 @@ public class SetmealController {
     }*/
     @GetMapping("/list")
     public R<List<Setmeal>> getSetmealList( Setmeal setmeal){
+        String key=setmeal.getCategoryId()+"_"+setmeal.getStatus();
+        List<Setmeal> setmealList=(List<Setmeal>) redisTemplate.opsForValue().get(key);
+        if(setmealList!=null){
+            return R.success(setmealList);
+        }
         Long cateGoryId= setmeal.getCategoryId();
         LambdaQueryWrapper<Setmeal> queryWrapper=new LambdaQueryWrapper<>();
         queryWrapper.eq(Setmeal::getCategoryId,cateGoryId)
                 .eq(Setmeal::getStatus,setmeal.getStatus());
-        List<Setmeal> setmealList=setMealService.list(queryWrapper);
-        return R.success(setmealList);
+        List<Setmeal> setmealList1=setMealService.list(queryWrapper);
+        redisTemplate.opsForValue().set(key,setmealList1);
+        return R.success(setmealList1);
 
     }
 

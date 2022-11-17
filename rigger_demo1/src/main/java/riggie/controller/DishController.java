@@ -7,6 +7,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang.StringUtils;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 import riggie.common.R;
@@ -32,8 +33,13 @@ public class DishController {
     private CategoryService categoryService;
     @Autowired
     private DishFlavorService dishFlavorService;
+    @Autowired
+    private RedisTemplate redisTemplate;
+
 @PostMapping
     public  R<String> saveDish(@RequestBody DishDto dishDto){
+
+
 
     log.info(dishDto.toString());
 
@@ -86,18 +92,30 @@ public class DishController {
 
     @PutMapping
     public R<String> updateDish(@RequestBody DishDto dishDto){
+    Dish dish=dishService.getById(dishDto.getId());
     dishService.updateDish(dishDto);
-    return R.success("修改成功");
+        if(dish.getStatus()==1){
+            String key=dish.getCategoryId()+"_"+dish.getStatus();
+            redisTemplate.delete(key);
+        }
+
+        return R.success("修改成功");
     }
 
 
     @GetMapping("/list")
-    public R<List<DishDto>> getDishListByCategoryId(  String categoryId){
+    public R<List<DishDto>> getDishListByCategoryId(Dish dish){
+        String key=dish.getCategoryId()+"_"+dish.getStatus();
+        List<DishDto> dishDtoList=(List<DishDto>) redisTemplate.opsForValue().get(key);
+        if (dishDtoList!=null){
+            return R.success(dishDtoList);
+        };
+
     LambdaQueryWrapper<Dish> queryWrapper=new LambdaQueryWrapper<>();
-    queryWrapper.eq(Dish::getCategoryId,categoryId );
+    queryWrapper.eq(Dish::getCategoryId,dish.getCategoryId() );
     List<Dish> dishList=dishService.list(queryWrapper);
 
-        List<DishDto> dishDtoList=  dishList.stream().map((item->{
+        List<DishDto> dishDtoList1=  dishList.stream().map((item->{
         DishDto dishDto=new DishDto();
         BeanUtils.copyProperties(item,dishDto);
         Long dishId=item.getId();
@@ -109,11 +127,19 @@ public class DishController {
         dishDto.setCategoryName(category.getName());
         return dishDto;
     })).collect(Collectors.toList());
-    return R.success(dishDtoList);
+        redisTemplate.opsForValue().set(key,dishDtoList1);
+    return R.success(dishDtoList1);
     }
     @DeleteMapping
     public R<String> deleteDishWithFlavor(Long ids){
+    Dish dish=dishService.getById(ids);
     dishService.deleteDishWithFlavor(ids);
+    if(dish.getStatus()==1){
+        String key=dish.getCategoryId()+"_"+dish.getStatus();
+        redisTemplate.delete(key);
+    }
+
+
     return R.success("删除菜品成功！");
     }
 
